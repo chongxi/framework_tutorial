@@ -14,6 +14,7 @@ class Car:
         self.pos = pos
         self.angle = 0
         self.speed = 0
+        self.average_speed = 0
         self.center = [self.pos[0] + 50, self.pos[1] + 50]
         self.radars = []
         self.radars_for_draw = []
@@ -146,6 +147,10 @@ class PyGame2D:
             self.car.angle += 5
         elif action == 2:
             self.car.angle -= 5
+        
+
+        self.car.average_speed += self.car.speed
+        self.car.average_speed /= 2
 
         self.car.update()
         self.car.check_collision()
@@ -157,17 +162,17 @@ class PyGame2D:
 
     def evaluate(self):
         reward = 0
-        """
-        if self.car.check_flag:
-            self.car.check_flag = False
-            reward = 2000 - self.car.time_spent
-            self.car.time_spent = 0
-        """
+
+        # if self.car.check_flag:
+        #     self.car.check_flag = False
+        #     reward = 2000 - self.car.time_spent
+        #     self.car.time_spent = 0
+
         if not self.car.is_alive:
-            reward = -10000 + self.car.distance
+            reward = -10000 + self.car.distance # + self.car.average_speed/self.car.time_spent * 10
 
         elif self.car.goal:
-            reward = 10000
+            reward = 20000 + self.car.distance # + self.car.average_speed/self.car.time_spent * 10
         return reward
 
     def is_done(self):
@@ -212,12 +217,10 @@ class PyGame2D:
         self.car.draw(self.screen)
 
 
-        text = self.font.render("Press 'm' to change view mode", True, (255, 255, 0))
-        text_rect = text.get_rect()
-        text_rect.center = (screen_width/2, 100)
-        self.screen.blit(text, text_rect)
-
-
+        # text = self.font.render("Press 'm' to change view mode", True, (255, 255, 0))
+        # text_rect = text.get_rect()
+        # text_rect.center = (screen_width/2, 100)
+        # self.screen.blit(text, text_rect)
 
         pygame.display.flip()
         self.clock.tick(self.game_speed)
