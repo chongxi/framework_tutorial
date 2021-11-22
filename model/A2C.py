@@ -189,6 +189,61 @@ class A2C_LSTM(nn.Module):
         log_prob_a_t = m.log_prob(a_t)
         return a_t, log_prob_a_t
 
+class A2C_ConvLSTM(nn.Module):
+    def __init__(self, dim_obs, dim_hidden, dim_action, device='cpu'):
+        super(A2C_ConvLSTM, self).__init__()
+        self.dim_obs = dim_obs
+        self.dim_action = dim_action
+        self.device = device
+        self.conv = nn.Sequential(
+            nn.Conv2d(self.dim_obs, 32, 5, stride=1, padding=2),
+            nn.MaxPool2d(2, 2),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, 5, stride=1, padding=1),
+            nn.MaxPool2d(2, 2),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 4, stride=1, padding=1),
+            nn.MaxPool2d(2, 2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, 3, stride=1, padding=1),
+            nn.MaxPool2d(2, 2),
+            nn.ReLU(),
+        )
+        self.lstm = nn.LSTM(1024, 512, batch_first=True)
+        self.act_net = nn.Sequential(
+            nn.Linear(512, self.dim_action),
+            # nn.ReLU(),
+            # nn.Linear(128, self.dim_action),
+        )
+        self.cri_net = nn.Sequential(
+            nn.Linear(512, 1),
+            # nn.ReLU(),
+            # nn.Linear(128, 1),
+        )
+        self.cx = torch.zeros(512).unsqueeze(0).unsqueeze(0).to(self.device)
+        self.hx = torch.zeros(512).unsqueeze(0).unsqueeze(0).to(self.device)
+
+    def forward(self, inputs):
+        x = self.conv(inputs)
+        x = x.view(-1, 1024).unsqueeze(0)
+
+        x, (hx, cx) = self.lstm(x, (self.hx, self.cx))
+        self.hx = hx
+        self.cx = cx
+
+        return self.act_net(x), self.cri_net(x)
+
+    def reset_lstm(self):
+        self.cx = torch.zeros(512).unsqueeze(0).unsqueeze(0).to(self.device)
+        self.hx = torch.zeros(512).unsqueeze(0).unsqueeze(0).to(self.device)
+
+    def pick_action(self, action_distribution):
+        m = torch.distributions.Categorical(action_distribution)
+        a_t = m.sample()
+        log_prob_a_t = m.log_prob(a_t)
+        return a_t, log_prob_a_t
+
+
 def softmax(z, beta):
     """helper function, softmax with beta
     Parameters

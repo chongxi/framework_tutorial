@@ -1,4 +1,6 @@
 from .A2C import A2C, A2C_linear, A2C_LSTM
+from .DND import DND
+from .DNDLSTM import DNDLSTM
 import numpy as np
 import torch
 import torch.nn as nn
@@ -68,6 +70,7 @@ def compute_returns(rewards, gamma=0, normalize=False):
     1d torch.tensor
         the sequence of cumulative return
     """
+    eps = np.finfo(np.float32).eps.item()   # a super small number like 1e-7
     R = 0
     returns = []
     for r in rewards[::-1]:
