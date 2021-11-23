@@ -2,8 +2,9 @@ import gym
 from gym import spaces
 import numpy as np
 from gym_game.envs.pygame_2d import PyGame2D
+from gym_game.envs.memory_task import MemoryTask
 
-class CustomEnv(gym.Env):
+class RaceEnv(gym.Env):
     #metadata = {'render.modes' : ['human']}
     def __init__(self):
         self.pygame = PyGame2D()
@@ -25,3 +26,26 @@ class CustomEnv(gym.Env):
 
     def render(self, mode="human", close=False):
         self.pygame.view()
+
+class MemEnv(gym.Env):
+    #metadata = {'render.modes' : ['human']}
+    def __init__(self):
+        self.task_env = MemoryTask()
+        self.action_space = spaces.Discrete(4)
+        self.observation_space = spaces.Box(np.array([0]*4500), np.array([128]*4500), dtype=np.int)
+
+    def reset(self):
+        del self.task_env
+        self.task_env = MemoryTask()
+        obs = self.task_env.observe()
+        return obs
+
+    def step(self, action):
+        self.task_env.update_by_action(action)
+        reward = self.task_env.evaluate()
+        obs = self.task_env.observe()
+        done = self.task_env.is_done()
+        return obs, reward, done, {}
+
+    def render(self, mode="human", close=False):
+        self.task_env.view()

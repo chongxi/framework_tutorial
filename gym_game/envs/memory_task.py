@@ -1,39 +1,58 @@
 import pygame
 import math
+import numpy as np
+import random
 
-screen_width = 1500
-screen_height = 800
-check_point = ((1200, 660), (1250, 120), (190, 200), (1030, 270), (250, 475), (650, 690))
+screen_width = 800
+screen_height = 250
+check_point = {'T1':[412, 471], 'T2':[557, 616]}
+rgb_weight = [0.299, 0.587, 0.114]
+speed_limit_low = 4
 
-class Car:
-    def __init__(self, car_file, map_file, pos):
-        self.surface = pygame.image.load(car_file)
-        self.map = pygame.image.load(map_file)
-        self.surface = pygame.transform.scale(self.surface, (100, 100))
+class Mouse:
+    def __init__(self, mouse_file, map_file, pos):
+        self.windowWidth, self.windowHeight = screen_width, screen_height
+        self.surface = pygame.image.load(mouse_file)
+        self.map = pygame.transform.scale(pygame.image.load(map_file), (self.windowWidth,self.windowHeight)).convert()
+        self.mouse_body_len = 28
+        pygame.draw.line(self.map, 'red', (check_point['T1'][0]+self.mouse_body_len, 0), (check_point['T1'][0]+self.mouse_body_len, 250), 2)
+        pygame.draw.line(self.map, 'red', (check_point['T1'][1]+self.mouse_body_len, 0), (check_point['T1'][1]+self.mouse_body_len, 250), 2)
+        pygame.draw.line(self.map, 'red', (check_point['T2'][0]+self.mouse_body_len, 0), (check_point['T2'][0]+self.mouse_body_len, 250), 2)
+        pygame.draw.line(self.map, 'red', (check_point['T2'][1]+self.mouse_body_len, 0), (check_point['T2'][1]+self.mouse_body_len, 250), 2)
+        self.maze_arr = pygame.surfarray.array3d(self.map).swapaxes(0,1) 
+        self.surface = pygame.transform.scale(self.surface, (30, 16))
+        self.font = pygame.font.SysFont("Arial", 15)
         self.rotate_surface = self.surface
         self.pos = pos
         self.angle = 0
         self.speed = 0
         self.average_speed = 0
-        self.center = [self.pos[0] + 50, self.pos[1] + 50]
+        self.licking = False
+        self.acquired_reward = 0  # acquired reward so far in this trial 
+        self.center = [self.pos[0] + 15, self.pos[1] + 8] 
         self.radars = []
         self.radars_for_draw = []
-        self.is_alive = True
+        self.trial_finish = False
         self.current_check = 0
         self.prev_distance = 0
         self.cur_distance = 0
         self.goal = False
-        self.check_flag = False
+        self.check_flag = 0
         self.distance = 0
         self.time_spent = 0
-        for d in range(-90, 120, 45):
-            self.check_radar(d)
+        self.obs_arr = None
 
-        for d in range(-90, 120, 45):
-            self.check_radar_for_draw(d)
-
-    def draw(self, screen):
+    def draw(self, screen, trial_type):
+        self.trial_type = trial_type
         screen.blit(self.rotate_surface, self.pos)
+        ## show animal position in text
+        text = self.font.render("pos:{:.2f},{:.2f}   /  Trial Type:{}  / flag:{}".format(self.pos[0], self.pos[1], trial_type, self.check_flag), True, 'black')
+        text_rect = text.get_rect()
+        text_rect.center = (120, 10)
+        screen.blit(text, text_rect)
+        ## show what the animal see
+        obs_surf = pygame.surfarray.make_surface(self.obs_arr.swapaxes(0,1))
+        screen.blit(obs_surf, (100, 200))
 
     def draw_collision(self, screen):
         for i in range(4):
@@ -47,65 +66,40 @@ class Car:
             pygame.draw.line(screen, (0, 255, 0), self.center, pos, 1)
             pygame.draw.circle(screen, (0, 255, 0), pos, 5)
 
-    def check_collision(self):
-        self.is_alive = True
-        for p in self.four_points:
-            if self.map.get_at((int(p[0]), int(p[1]))) == (255, 255, 255, 255):
-                self.is_alive = False
-                break
+    def check_trial_finish(self):
+        self.trial_finish = False
+        if self.pos[0] >= 670-30:
+            self.trial_finish = True
 
-    def check_radar(self, degree):
-        len = 0
-        x = int(self.center[0] + math.cos(math.radians(360 - (self.angle + degree))) * len)
-        y = int(self.center[1] + math.sin(math.radians(360 - (self.angle + degree))) * len)
-
-        while not self.map.get_at((x, y)) == (255, 255, 255, 255) and len < 300:
-            len = len + 1
-            x = int(self.center[0] + math.cos(math.radians(360 - (self.angle + degree))) * len)
-            y = int(self.center[1] + math.sin(math.radians(360 - (self.angle + degree))) * len)
-
-        dist = int(math.sqrt(math.pow(x - self.center[0], 2) + math.pow(y - self.center[1], 2)))
-        self.radars.append([(x, y), dist])
-
-
-    def check_radar_for_draw(self, degree):
-        len = 0
-        x = int(self.center[0] + math.cos(math.radians(360 - (self.angle + degree))) * len)
-        y = int(self.center[1] + math.sin(math.radians(360 - (self.angle + degree))) * len)
-
-        while not self.map.get_at((x, y)) == (255, 255, 255, 255) and len < 300:
-            len = len + 1
-            x = int(self.center[0] + math.cos(math.radians(360 - (self.angle + degree))) * len)
-            y = int(self.center[1] + math.sin(math.radians(360 - (self.angle + degree))) * len)
-
-        dist = int(math.sqrt(math.pow(x - self.center[0], 2) + math.pow(y - self.center[1], 2)))
-        self.radars_for_draw.append([(x, y), dist])
-
-    def check_checkpoint(self):
-        p = check_point[self.current_check]
-        self.prev_distance = self.cur_distance
-        dist = get_distance(p, self.center)
-        if dist < 70:
-            self.current_check += 1
-            self.prev_distance = 9999
-            self.check_flag = True
-            if self.current_check >= len(check_point):
-                self.current_check = 0
-                self.goal = True
-            else:
-                self.goal = False
-
-        self.cur_distance = dist
+    def check_licking(self):
+        self.goal = False
+        if self.pos[0] > check_point['T1'][0] and self.pos[0] < check_point['T1'][1] and self.trial_type == 'T1':
+            self.check_flag += 1
+            self.goal = True
+            pygame.draw.circle(self.map, 'red', (int(self.pos[0]+self.mouse_body_len), int(self.pos[1]+8)), 5)
+        elif self.pos[0] > check_point['T2'][0] and self.pos[0] < check_point['T2'][1] and self.trial_type == 'T2':
+            self.check_flag += 1
+            self.goal = True
+            pygame.draw.circle(self.map, 'red', (int(self.pos[0]+self.mouse_body_len), int(self.pos[1]+8)), 5)
+        # if self.check_flag >= 6:
+        #     self.check_flag == 6
+        #     self.goal = False
+        if self.goal is False and self.licking:
+            pygame.draw.circle(self.map, 'green', (int(self.pos[0]+self.mouse_body_len), int(self.pos[1]+8)), 5)
 
     def update(self):
-        #check speed
+        # check speed
         self.speed -= 0.5
-        if self.speed > 10:
-            self.speed = 10
-        if self.speed < 1:
-            self.speed = 1
+        if self.speed > 20:
+            self.speed = 20
+        if self.speed < speed_limit_low:
+            self.speed = speed_limit_low
 
-        #check position
+        # check average speed
+        self.average_speed += self.speed
+        self.average_speed /= 2
+
+        # check position
         self.rotate_surface = rot_center(self.surface, self.angle)
         self.pos[0] += math.cos(math.radians(360 - self.angle)) * self.speed
         if self.pos[0] < 20:
@@ -121,75 +115,58 @@ class Car:
         elif self.pos[1] > screen_height - 120:
             self.pos[1] = screen_height - 120
 
-        # caculate 4 collision points
-        self.center = [int(self.pos[0]) + 50, int(self.pos[1]) + 50]
-        len = 40
-        left_top = [self.center[0] + math.cos(math.radians(360 - (self.angle + 30))) * len, self.center[1] + math.sin(math.radians(360 - (self.angle + 30))) * len]
-        right_top = [self.center[0] + math.cos(math.radians(360 - (self.angle + 150))) * len, self.center[1] + math.sin(math.radians(360 - (self.angle + 150))) * len]
-        left_bottom = [self.center[0] + math.cos(math.radians(360 - (self.angle + 210))) * len, self.center[1] + math.sin(math.radians(360 - (self.angle + 210))) * len]
-        right_bottom = [self.center[0] + math.cos(math.radians(360 - (self.angle + 330))) * len, self.center[1] + math.sin(math.radians(360 - (self.angle + 330))) * len]
-        self.four_points = [left_top, right_top, left_bottom, right_bottom]
+class MemoryTask:
 
-class PyGame2D:
+    trial_types = ['T1', 'T2']
+    
     def __init__(self):
         pygame.init()
+        # self.trial_type = self.trial_types[random.choice([0,1])]
+        self.trial_type = self.trial_types[0]
         self.screen = pygame.display.set_mode((screen_width, screen_height))
+        pygame.display.set_caption('contextual moemory T1/2 task') 
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("Arial", 30)
-        self.car = Car('car.png', 'map.png', [700, 650])
-        self.game_speed = 60
+        self.animal_begin_location = [58, 119.2] if self.trial_type == 'T1' else [58, 57]
+        self.animal = Mouse('mouse.png', 'task.png', self.animal_begin_location)
+        self.animal.trial_type = self.trial_type
+        self.frame_rate = 60
         self.mode = 0
 
-    def action(self, action):
+    def update_by_action(self, action):
         if action == 0:
-            self.car.speed += 2
-        if action == 1:
-            self.car.angle += 5
+            self.animal.speed += 3
+        elif action == 1:
+            self.animal.speed -= 1
         elif action == 2:
-            self.car.angle -= 5
+            self.animal.licking = True
+            self.animal.check_licking()
+        elif action == 3:
+            self.animal.licking = False
+
+        self.animal.update()
+        self.animal.check_trial_finish()
         
-
-        self.car.average_speed += self.car.speed
-        self.car.average_speed /= 2
-
-        self.car.update()
-        self.car.check_collision()
-        self.car.check_checkpoint()
-
-        self.car.radars.clear()
-        for d in range(-90, 120, 45):
-            self.car.check_radar(d)
-
     def evaluate(self):
         reward = 0
-
-        # if self.car.check_flag:
-        #     self.car.check_flag = False
-        #     reward = 2000 - self.car.time_spent
-        #     self.car.time_spent = 0
-
-        if not self.car.is_alive:
-            reward = -10000 + self.car.distance # + self.car.average_speed/self.car.time_spent * 10
-
-        elif self.car.goal:
-            reward = 20000 + self.car.distance # + self.car.average_speed/self.car.time_spent * 10
+        if self.animal.goal:
+            reward += 110
+        if self.animal.licking:
+            reward -= 10
+        # reward -= self.animal.time_spent * 0.1
+        self.animal.goal = False # reset goal status
         return reward
 
     def is_done(self):
-        if not self.car.is_alive or self.car.goal:
-            self.car.current_check = 0
-            self.car.distance = 0
+        if self.animal.trial_finish:
             return True
         return False
 
     def observe(self):
-        # return state
-        radars = self.car.radars
-        ret = [0, 0, 0, 0, 0]
-        for i, r in enumerate(radars):
-            ret[i] = int(r[1] / 30)
-
-        return tuple(ret)
+        # return observation of the animal
+        self.animal.obs_arr = self.animal.maze_arr[int(self.animal.pos[1])-15:int(self.animal.pos[1])+30, int(self.animal.pos[0])+30:int(self.animal.pos[0])+130]
+        obs_arr = np.dot(self.animal.obs_arr[...,:3], rgb_weight) # convert to gray scale
+        return obs_arr.flatten()
 
     def view(self):
         # draw game
@@ -201,29 +178,15 @@ class PyGame2D:
                     self.mode += 1
                     self.mode = self.mode % 3
 
-        self.screen.blit(self.car.map, (0, 0))
-
+        self.screen.blit(self.animal.map, (0, 0))
 
         if self.mode == 1:
             self.screen.fill((0, 0, 0))
 
-        self.car.radars_for_draw.clear()
-        for d in range(-90, 120, 45):
-            self.car.check_radar_for_draw(d)
-
-        pygame.draw.circle(self.screen, (255, 255, 0), check_point[self.car.current_check], 70, 1)
-        self.car.draw_collision(self.screen)
-        self.car.draw_radar(self.screen)
-        self.car.draw(self.screen)
-
-
-        # text = self.font.render("Press 'm' to change view mode", True, (255, 255, 0))
-        # text_rect = text.get_rect()
-        # text_rect.center = (screen_width/2, 100)
-        # self.screen.blit(text, text_rect)
+        self.animal.draw(self.screen, self.trial_type)
 
         pygame.display.flip()
-        self.clock.tick(self.game_speed)
+        self.clock.tick(self.frame_rate)
 
 
 def get_distance(p1, p2):

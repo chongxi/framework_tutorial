@@ -64,11 +64,16 @@ class App:
         self.surface = pygame.display.set_mode((self.windowWidth,self.windowHeight), pygame.HWSURFACE) 
         pygame.display.set_caption('contextual moemory task') 
         self._running = True
-        self.image_mouse = pygame.transform.scale(pygame.image.load("mouse.png").convert(), (30,15)) 
+        self.image_mouse = pygame.transform.scale(pygame.image.load("mouse.png").convert(), (30,16)) 
         # self._block_surf = pygame.transform.scale(pygame.image.load("task.png").convert(), (100,20))
         maze_image = pygame.transform.scale(pygame.image.load("task.png"), (self.windowWidth,self.windowHeight)) 
         self.maze_image = maze_image.convert() 
         self.maze_arr = pygame.surfarray.array3d(maze_image).swapaxes(0,1) 
+        mouse_body_len = 28
+        pygame.draw.line(self.maze_image, 'black', (412+mouse_body_len,0), (412+mouse_body_len,250), 2)
+        pygame.draw.line(self.maze_image, 'black', (471+mouse_body_len,0), (471+mouse_body_len,250), 2)
+        pygame.draw.line(self.maze_image, 'black', (557+mouse_body_len,0), (557+mouse_body_len,250), 2)
+        pygame.draw.line(self.maze_image, 'black', (616+mouse_body_len,0), (616+mouse_body_len,250), 2)
         self.font = pygame.font.SysFont("Arial", 15) 
 
     def on_event(self, event):
@@ -93,8 +98,6 @@ class App:
 
         ## show observation of the mouse
         obs_arr = self.maze_arr[int(self.player.y)-15:int(self.player.y)+30, int(self.player.x)+30:int(self.player.x)+130]
-        if (type(obs_arr) == np.ndarray):
-            print(obs_arr.shape)
         obs_surf = pygame.surfarray.make_surface(obs_arr.swapaxes(0,1))
         self.surface.blit(obs_surf, (100, 200))
 
